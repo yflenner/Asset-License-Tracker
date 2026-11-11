@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>מערכת מעקב וניהול ציוד ורישיונות (Asset & License Tracker)</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo-area">
+        <span class="icon">📦</span>
+        <div>
+          <h1>מערכת מעקב וניהול ציוד ורישיונות</h1>
+          <p class="subtitle">Asset & License Tracker — ממשק Web נאמן למקור (Client-Side)</p>
+        </div>
+      </div>
+      <div class="header-badges">
+        <span class="storage-badge" id="storage-status">💾 שמירה מקומית (LocalStorage)</span>
+        <button id="btn-reset-data" class="btn-text" title="אפס לברירת מחדל של מערכת ה-CLI">🔄 איפוס נתונים</button>
+      </div>
+    </header>
+
+    <!-- Stats Bar -->
+    <section class="stats-bar">
+      <div class="stat-card">
+        <div class="stat-val" id="stat-total">0</div>
+        <div class="stat-label">סה"כ פריטים במערכת</div>
+      </div>
+      <div class="stat-card stat-available">
+        <div class="stat-val" id="stat-available">0</div>
+        <div class="stat-label">פנויים להשאלה / שיוך</div>
+      </div>
+      <div class="stat-card stat-in-use">
+        <div class="stat-val" id="stat-borrowed">0</div>
+        <div class="stat-label">מושאלים / משויכים לעובדים</div>
+      </div>
+      <div class="stat-card stat-expired">
+        <div class="stat-val" id="stat-expired">0</div>
+        <div class="stat-label">רישיונות שפג תוקפם</div>
+      </div>
+    </section>
+
+    <!-- Alert / Notification Banner -->
+    <div id="toast-message" class="toast hidden"></div>
+
+    <!-- Navigation Tabs (Faithful to CLI options 1-4) -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="tab-list">
+        <span class="tab-num">1</span> הצגת כל הציוד / רישיונות
+      </button>
+      <button class="tab-btn" data-tab="tab-assign">
+        <span class="tab-num">2</span> השאלת ציוד / שיוך רישיון
+      </button>
+      <button class="tab-btn" data-tab="tab-return">
+        <span class="tab-num">3</span> החזרת ציוד ועדכון סטטוס
+      </button>
+      <button class="tab-btn" data-tab="tab-report">
+        <span class="tab-num">4</span> ייצוא דוח חסר/פג תוקף (TXT)
+      </button>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="tab-content-wrapper">
+      
+      <!-- TAB 1: Asset List -->
+      <section id="tab-list" class="tab-panel active">
+        <div class="panel-header">
+          <h2>רשימת הציוד והרישיונות הקיימים (מקובץ שמור)</h2>
+          <div class="filter-controls">
+            <input type="text" id="search-input" placeholder="🔍 חיפוש לפי ID, שם או עובד..." />
+            <select id="status-filter">
+              <option value="all">כל הסטטוסים</option>
+              <option value="available">פנוי (Available)</option>
+              <option value="borrowed">מושאל (Borrowed)</option>
+              <option value="assigned">משויך (Assigned)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table" id="assets-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>שם הפריט / רישיון</th>
+                <th>סוג</th>
+                <th>סטטוס</th>
+                <th>משויך ל</th>
+                <th>תוקף רישיון</th>
+                <th>פעולות</th>
+              </tr>
+            </thead>
+            <tbody id="assets-tbody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 2: Borrow / Assign -->
+      <section id="tab-assign" class="tab-panel">
+        <div class="form-card">
+          <div class="form-header">
+            <h2>השאלת ציוד לעובד / שיוך רישיון</h2>
+            <p>המערכת בודקת שהציוד פנוי, שהקלט אינו ריק, ומונעת שיוך רישיון שפג תוקפו.</p>
+          </div>
+          
+          <form id="assign-form" class="app-form">
+            <div class="form-group">
+              <label for="assign-asset-id">מזהה פריט (ID) <span class="required">*</span></label>
+              <div class="input-with-lookup">
+                <input type="text" id="assign-asset-id" placeholder="למשל: A101 או L202" required autocomplete="off">
+                <button type="button" id="btn-quick-select" class="btn-secondary">בחירה מהירה מרשימה</button>
+              </div>
+              <small class="hint">החיפוש אינו תלוי באותיות קטנות/גדולות (Case-Insensitive).</small>
+              <div id="quick-select-dropdown" class="dropdown-list hidden"></div>
+            </div>
+
+            <div class="form-group">
+              <label for="assign-employee-name">שם עובד <span class="required">*</span></label>
+              <input type="text" id="assign-employee-name" placeholder="הזן שם מלא של העובד" required autocomplete="off">
+              <small class="hint">לא ניתן להזין שם עובד ריק או רווחים בלבד.</small>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-primary">השאל ציוד / שייך רישיון</button>
+              <button type="reset" class="btn-secondary">נקה טופס</button>
+            </div>
+          </form>
+
+          <div id="assign-preview" class="item-preview-card hidden">
+            <!-- Dynamic Preview of Selected Item -->
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: Return Asset -->
+      <section id="tab-return" class="tab-panel">
+        <div class="form-card">
+          <div class="form-header">
+            <h2>החזרת ציוד ועדכון הסטטוס</h2>
+            <p>שחרור ציוד מושאל או רישיון משויך והחזרתו למצב פנוי (Available).</p>
+          </div>
+
+          <form id="return-form" class="app-form">
+            <div class="form-group">
+              <label for="return-asset-id">מזהה פריט להחזרה (ID) <span class="required">*</span></label>
+              <input type="text" id="return-asset-id" placeholder="הזן ID של פריט מושאל (למשל: A102)" required autocomplete="off">
+              <small class="hint">המערכת תאמת שהפריט אינו פנוי ותשחרר אותו מהעובד.</small>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-primary">אשר החזרת ציוד</button>
+              <button type="reset" class="btn-secondary">נקה</button>
+            </div>
+          </form>
+
+          <!-- Currently Borrowed Quick List -->
+          <div class="quick-borrowed-container">
+            <h3>פריטים שמושאלים / משויכים כעת:</h3>
+            <div id="borrowed-items-chips" class="chips-list">
+              <!-- Dynamically populated chips -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: Export Report -->
+      <section id="tab-report" class="tab-panel">
+        <div class="form-card">
+          <div class="form-header">
+            <h2>ייצוא דוח ציוד חסר/מושאל ורישיונות פגי תוקף</h2>
+            <p>מפיק דוח בפורמט טקסט זהה לחלוטין לפלט ה-CLI ומאפשר הורדה מיידית של קובץ TXT למחשב.</p>
+          </div>
+
+          <div class="export-controls">
+            <div class="form-group inline-group">
+              <label for="report-filename">שם קובץ לייצוא:</label>
+              <div class="input-with-extension">
+                <input type="text" id="report-filename" value="report.txt" placeholder="report.txt">
+              </div>
+            </div>
+            <div class="export-actions">
+              <button id="btn-generate-preview" class="btn-secondary">👁️ תצוגה מקדימה של הדוח</button>
+              <button id="btn-download-report" class="btn-primary">⬇️ הורדת קובץ TXT למחשב</button>
+            </div>
+          </div>
+
+          <!-- Report Preview Terminal Window -->
+          <div class="terminal-window">
+            <div class="terminal-bar">
+              <span class="dot red"></span>
+              <span class="dot yellow"></span>
+              <span class="dot green"></span>
+              <span class="terminal-title">report.txt (תצוגת פלט טקסטואלית)</span>
+            </div>
+            <pre id="report-preview-text" class="terminal-body">
+טוען תצוגת דוח...
+            </pre>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>Asset & License Tracker — ממשק Web מבוסס HTML5 / Pure Vanilla CSS & JS ללא תלות בספרייה חיצונית.</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
